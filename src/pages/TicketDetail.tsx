@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { lastRequesterName, rememberRequesterName, type DepartmentSession } from '../lib/auth';
 import { useDraft } from '../lib/drafts';
-import { thumbnail } from '../lib/cloudinary';
+import { photoSrc, thumbnail } from '../lib/photos';
 import { formatDate } from '../lib/format';
 import {
   STATUS_LABELS,
@@ -108,7 +108,7 @@ export default function TicketDetail({ session, id }: { session: DepartmentSessi
         {ticket.photos.length > 0 && (
           <div className="photo-grid">
             {ticket.photos.map((url) => (
-              <a key={url} href={url} target="_blank" rel="noreferrer" className="photo">
+              <a key={url} href={photoSrc(url)} target="_blank" rel="noreferrer" className="photo">
                 <img src={thumbnail(url)} alt="" />
               </a>
             ))}

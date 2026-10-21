@@ -4,7 +4,7 @@ import { VitePWA } from 'vite-plugin-pwa';
 
 /**
  * Content-Security-Policy as a <meta> tag, built from VITE_API_URL so the
- * page may only talk to the API and Cloudinary (uploads + images). Limits
+ * page may only talk to the API (data, uploads and photos). Limits
  * the damage of any injected script — the refresh token lives in storage.
  */
 function csp(apiUrl: string): Plugin {
@@ -13,8 +13,9 @@ function csp(apiUrl: string): Plugin {
     "default-src 'self'",
     "script-src 'self'",
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob: https://res.cloudinary.com",
-    `connect-src 'self' ${api} https://api.cloudinary.com`,
+    // Photos are served by the API; res.cloudinary.com only for older photos.
+    `img-src 'self' data: blob: ${api} https://res.cloudinary.com`,
+    `connect-src 'self' ${api}`,
     "font-src 'self'",
     "object-src 'none'",
     "base-uri 'self'",

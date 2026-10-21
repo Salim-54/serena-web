@@ -118,6 +118,8 @@ export interface RequestOptions {
   raw?: boolean;
   /** Don't try to refresh on 401 (auth endpoints). */
   noRefresh?: boolean;
+  /** Multipart body (file uploads); the browser sets the boundary. */
+  form?: FormData;
 }
 
 function url(path: string, query?: RequestOptions['query']) {
@@ -135,10 +137,10 @@ export async function api<T = unknown>(method: string, path: string, opts: Reque
     fetch(url(path, opts.query), {
       method,
       headers: {
-        ...(opts.body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+        ...(opts.body !== undefined && !opts.form ? { 'Content-Type': 'application/json' } : {}),
         ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
       },
-      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+      body: opts.form ?? (opts.body !== undefined ? JSON.stringify(opts.body) : undefined),
     });
 
   let res = await send().catch(() => null);

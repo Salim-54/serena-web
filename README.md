@@ -27,7 +27,7 @@ The API must list the portal's origin in its `CORS_ORIGINS`.
 | Tokens | access token in memory only; single-use refresh token in `localStorage`; refreshed on 401, serialised across calls **and tabs** (Web Locks) so reuse detection never signs you out |
 | Forced password change | `mustChangePassword` / `PASSWORD_CHANGE_REQUIRED` → change-password screen (`PATCH /auth/password`) |
 | Live updates | polling every 30 s while visible (replaces Supabase Realtime) |
-| Photos | compressed in the browser, uploaded straight to Cloudinary with a signature from `POST /uploads/cloudinary-signature`; the server names them after the ticket (`MT-00012-resolved-…`). New tickets: photos wait on the device (IndexedDB) and upload right after creation |
+| Photos | compressed in the browser and uploaded to the API (`POST /uploads/photos`), which stores them on its machine and names them after the ticket (`MT-00012-resolved-…`); tickets return signed, expiring photo links. New tickets: photos wait on the device (IndexedDB) and upload right after creation |
 | Reports | `GET /tickets/report.xlsx`, `GET /readings/export.xlsx` (built by the server) |
 
 ## Who sees what
@@ -45,12 +45,12 @@ Decided by the API (`permissions`), not the portal:
 ## Security
 
 - Strict **Content-Security-Policy** `<meta>` in production builds (scripts
-  from the site only; network only to the API and Cloudinary), generated
+  from the site only; network and images only from the API), generated
   from `VITE_API_URL` — limits what an injected script could reach.
 - `vercel.json` security headers (HSTS, `X-Frame-Options: DENY`,
   `nosniff`, referrer and permissions policies).
-- No secrets in the bundle: only the API URL. Cloudinary uploads are signed
-  by the server.
+- No secrets in the bundle: only the API URL. Photos are stored by the API
+  and shown through signed links that expire.
 - Passwords are never stored; drafts never include them.
 - Short-lived access tokens, rotating refresh tokens with server-side reuse
   detection, account lockout and password policy (all in the API).

@@ -1,4 +1,4 @@
-import { photosEnabled } from '../lib/cloudinary';
+import { photosEnabled } from '../lib/photos';
 
 /** "📷 Take photo" (camera) and "🖼 Attach from gallery" buttons. */
 export default function PhotoPicker({

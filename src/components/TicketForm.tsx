@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { photosEnabled, thumbnail, uploadTicketPhoto } from '../lib/cloudinary';
+import { photosEnabled, thumbnail, uploadTicketPhoto } from '../lib/photos';
 import { useDraft } from '../lib/drafts';
 import { compressImage } from '../lib/image';
 import { clearPending, loadPending, savePending } from '../lib/pendingPhotos';
@@ -11,7 +11,7 @@ import PhotoPicker from './PhotoPicker';
 // screens.
 //
 // Everything typed is kept as a draft (lib/drafts.ts). Photos are uploaded
-// with a signature from the API, which names them after the ticket
+// to the API, which stores them and names them after the ticket
 // ("MT-00012-request-…"):
 //   * editing an existing ticket → compressed and uploaded straight away;
 //   * new ticket → the number doesn't exist yet, so compressed photos wait

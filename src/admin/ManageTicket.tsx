@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Session } from '../lib/auth';
-import { type PhotoPurpose, uploadTicketPhoto } from '../lib/cloudinary';
+import { type PhotoPurpose, photoSrc, thumbnail, uploadTicketPhoto } from '../lib/photos';
 import { compressImage } from '../lib/image';
 import { SUPERVISOR_TRANSITIONS, permissionsFor } from '../lib/permissions';
 import PhotoPicker from '../components/PhotoPicker';
 import PhotoStrip from '../components/PhotoStrip';
 import { PriorityBadge, StatusBadge } from '../components/Badges';
 import TechnicianList from '../components/TechnicianList';
-import { thumbnail } from '../lib/cloudinary';
 import { formatDate } from '../lib/format';
 import {
   ALL_STATUSES,
@@ -203,7 +202,7 @@ export default function ManageTicket({ session, id }: { session: Session; id: st
           {ticket.photos.length > 0 && (
             <div className="photo-grid">
               {ticket.photos.map((url) => (
-                <a key={url} href={url} target="_blank" rel="noreferrer" className="photo">
+                <a key={url} href={photoSrc(url)} target="_blank" rel="noreferrer" className="photo">
                   <img src={thumbnail(url)} alt="" />
                 </a>
               ))}
