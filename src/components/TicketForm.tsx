@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { photosEnabled, thumbnail, uploadTicketPhoto } from '../lib/photos';
+import { photosEnabled, uploadTicketPhoto } from '../lib/photos';
+import AuthImage from './AuthImage';
 import { useDraft } from '../lib/drafts';
 import { compressImage } from '../lib/image';
 import { clearPending, loadPending, savePending } from '../lib/pendingPhotos';
@@ -256,7 +257,7 @@ export default function TicketForm({
             <div className="photo-grid">
               {v.photos.map((url) => (
                 <div key={url} className="photo">
-                  <img src={thumbnail(url)} alt="" />
+                  <AuthImage src={url} size={240} />
                   <button type="button" onClick={() => set('photos', v.photos.filter((u) => u !== url))} aria-label="Remove photo">
                     ×
                   </button>

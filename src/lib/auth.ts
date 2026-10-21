@@ -1,4 +1,5 @@
 import { ApiError, api, refreshSession, setTokens, storedRefreshToken } from './api';
+import { clearPhotoCache } from './photos';
 
 // Sign-in against the RM Utility API. The server decides what each login
 // may do and returns it as `permissions` (see lib/permissions.ts).
@@ -84,6 +85,7 @@ export async function restoreSession(): Promise<Session | null> {
 }
 
 export async function logout() {
+  clearPhotoCache();
   const refreshToken = storedRefreshToken();
   setTokens(null, null);
   if (refreshToken) await api('POST', '/auth/logout', { body: { refreshToken }, noRefresh: true }).catch(() => {});

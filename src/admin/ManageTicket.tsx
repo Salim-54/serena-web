@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Session } from '../lib/auth';
-import { type PhotoPurpose, photoSrc, thumbnail, uploadTicketPhoto } from '../lib/photos';
+import { type PhotoPurpose, uploadTicketPhoto } from '../lib/photos';
 import { compressImage } from '../lib/image';
 import { SUPERVISOR_TRANSITIONS, permissionsFor } from '../lib/permissions';
 import PhotoPicker from '../components/PhotoPicker';
@@ -200,13 +200,7 @@ export default function ManageTicket({ session, id }: { session: Session; id: st
             <dd>{formatHours(hoursBetween(ticket.created_at, ticket.resolved_at))}</dd>
           </dl>
           {ticket.photos.length > 0 && (
-            <div className="photo-grid">
-              {ticket.photos.map((url) => (
-                <a key={url} href={photoSrc(url)} target="_blank" rel="noreferrer" className="photo">
-                  <img src={thumbnail(url)} alt="" />
-                </a>
-              ))}
-            </div>
+            <PhotoStrip photos={ticket.photos} size={96} />
           )}
         </article>
 
