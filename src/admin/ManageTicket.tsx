@@ -2,12 +2,13 @@ import { useCallback, useEffect, useState } from 'react';
 import type { Session } from '../lib/auth';
 import { type PhotoPurpose, uploadTicketPhoto } from '../lib/photos';
 import { compressImage } from '../lib/image';
-import { SUPERVISOR_TRANSITIONS, permissionsFor } from '../lib/permissions';
+import { SUPERVISOR_TRANSITIONS, canCustomizeTimes, permissionsFor } from '../lib/permissions';
 import PhotoPicker from '../components/PhotoPicker';
 import PhotoStrip from '../components/PhotoStrip';
 import { PriorityBadge, StatusBadge } from '../components/Badges';
 import TechnicianList from '../components/TechnicianList';
-import { formatDate } from '../lib/format';
+import WhenField from '../components/WhenField';
+import { formatDate, fromLocalInput, toLocalInput } from '../lib/format';
 import {
   ALL_STATUSES,
   addNote,
@@ -17,6 +18,7 @@ import {
   hoursBetween,
   listEvents,
   listTechnicians,
+  setEventTimes,
   setStatus,
   setTechnicians,
   watchAllTickets,
@@ -30,6 +32,11 @@ import { STATUS_LABELS, ticketNumber, type TicketEvent, type TicketStatus } from
 // Admin view of one ticket: full rights — assign/reassign at any stage, move
 // to any status (incl. closing without the requester's approval and
 // reopening), notes, edit, delete.
+//
+// Times are automatic. On tickets raised by admin or maintenance staff,
+// those two roles can also give a step an earlier time ("Done earlier?"
+// under assign / status / note) and adjust the timeline afterwards (a
+// low-key "Adjust times" link); admins see who adjusted it.
 
 function actionLabel(from: TicketStatus, to: TicketStatus): string {
   if (to === 'in_progress' && ['resolved', 'closed', 'cancelled'].includes(from)) return 'Reopen';
@@ -40,6 +47,17 @@ function actionLabel(from: TicketStatus, to: TicketStatus): string {
   return STATUS_LABELS[to];
 }
 
+/** Label of the "Done earlier?" time for a move to each status. */
+const STEP_TIME_LABELS: Record<TicketStatus, string> = {
+  open: 'Back to open at',
+  assigned: 'Assigned at',
+  in_progress: 'Started at',
+  on_hold: 'Put on hold at',
+  resolved: 'Resolved at',
+  closed: 'Closed at',
+  cancelled: 'Cancelled at',
+};
+
 export default function ManageTicket({ session, id }: { session: Session; id: string }) {
   const [ticket, setTicket] = useState<AdminTicket | null | undefined>(undefined);
   const [events, setEvents] = useState<TicketEvent[]>([]);
@@ -49,7 +67,7 @@ export default function ManageTicket({ session, id }: { session: Session; id: st
   // Unsent status change / notes survive a refresh.
   // Photos are uploaded as soon as they're picked (named after the ticket)
   // and their URLs kept in the draft.
-  const [statusDraft, setStatusDraft, statusDraftCtl] = useDraft<{ status: TicketStatus | null; note: string; photos?: string[] }>(
+  const [statusDraft, setStatusDraft, statusDraftCtl] = useDraft<{ status: TicketStatus | null; note: string; photos?: string[]; at?: string | null }>(
     `manage-status:${id}`,
     { status: null, note: '', photos: [] },
   );
@@ -58,7 +76,11 @@ export default function ManageTicket({ session, id }: { session: Session; id: st
   const statusPhotos = statusDraft.photos ?? [];
   const setPendingStatus = (s: TicketStatus | null) => setStatusDraft((d) => ({ ...d, status: s }));
   const setNote = (n: string) => setStatusDraft((d) => ({ ...d, note: n }));
-  const [noteDraft, setNoteDraft, noteDraftCtl] = useDraft<{ text: string; photos: string[] }>(`manage-note:v2:${id}`, { text: '', photos: [] });
+  const [noteDraft, setNoteDraft, noteDraftCtl] = useDraft<{ text: string; photos: string[]; at?: string | null }>(`manage-note:v2:${id}`, { text: '', photos: [] });
+  // "Done earlier?" time for the technician change (datetime-local; null = now).
+  const [techAt, setTechAt] = useState<string | null>(null);
+  // Timeline times being adjusted (event id → datetime-local value); null = not editing.
+  const [times, setTimes] = useState<Record<number, string> | null>(null);
   const [uploadingCount, setUploadingCount] = useState(0);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -109,6 +131,16 @@ export default function ManageTicket({ session, id }: { session: Session; id: st
     s !== ticket.status && (perms.tickets.manage || (SUPERVISOR_TRANSITIONS[ticket.status] ?? []).includes(s)),
   );
   const canAssign = perms.tickets.manage || (perms.tickets.workflow && !['resolved', 'closed', 'cancelled'].includes(ticket.status));
+  const canEditTimes = canCustomizeTimes(session, ticket);
+  // Custom step times must come after the last timeline entry.
+  const lastEventAt = events.length ? events[events.length - 1].created_at : ticket.created_at;
+  const stepAt = (v: string | null | undefined) => (canEditTimes && v ? fromLocalInput(v) : null);
+  const changedTimes = times
+    ? Object.fromEntries(
+        events.filter((e) => times[e.id] && times[e.id] !== toLocalInput(e.created_at)).map((e) => [e.id, fromLocalInput(times[e.id])]),
+      )
+    : {};
+  const nowInput = toLocalInput(new Date());
 
   /** Compress + upload (the server names it, e.g. "MT-00012-resolved-…"); [onUrl] gets each URL. */
   async function uploadPhotos(files: File[], purpose: PhotoPurpose, onUrl: (url: string) => void) {
@@ -239,8 +271,9 @@ export default function ManageTicket({ session, id }: { session: Session; id: st
                     disabled={busy}
                     onClick={() =>
                       run(async () => {
-                        await setTechnicians(ticket, [...pickedIds]);
+                        await setTechnicians(ticket, [...pickedIds], stepAt(techAt));
                         setPicked(null);
+                        setTechAt(null);
                       }, pickedIds.size ? `Assigned to ${technicians.filter((t) => pickedIds.has(t.id)).map((t) => t.name).join(', ')}` : 'Technicians removed')
                     }
                   >
@@ -248,6 +281,9 @@ export default function ManageTicket({ session, id }: { session: Session; id: st
                   </button>
                   <button className="btn ghost small" onClick={() => setPicked(null)}>Undo</button>
                 </div>
+              )}
+              {pickDirty && canEditTimes && (
+                <WhenField value={techAt} onChange={setTechAt} min={lastEventAt} label="Assigned at" disabled={busy} />
               )}
             </div>
           )}
@@ -285,13 +321,22 @@ export default function ManageTicket({ session, id }: { session: Session; id: st
                 }
               />
               {uploadingCount > 0 && <p className="muted small">Uploading {uploadingCount} photo(s)…</p>}
+              {canEditTimes && (
+                <WhenField
+                  value={statusDraft.at ?? null}
+                  onChange={(at) => setStatusDraft((d) => ({ ...d, at }))}
+                  min={lastEventAt}
+                  label={STEP_TIME_LABELS[pendingStatus]}
+                  disabled={busy}
+                />
+              )}
               <div className="actions">
                 <button
                   className="btn primary small"
                   disabled={busy || uploadingCount > 0}
                   onClick={() =>
                     run(async () => {
-                      await setStatus(ticket, pendingStatus, note, statusPhotos);
+                      await setStatus(ticket, pendingStatus, note, statusPhotos, stepAt(statusDraft.at));
                       statusDraftCtl.discard();
                     }, `Moved to ${STATUS_LABELS[pendingStatus]}`)
                   }
@@ -310,7 +355,7 @@ export default function ManageTicket({ session, id }: { session: Session; id: st
               e.preventDefault();
               if (!noteDraft.text.trim() && !noteDraft.photos.length) return;
               run(async () => {
-                await addNote(ticket.id, noteDraft.text, noteDraft.photos);
+                await addNote(ticket.id, noteDraft.text, noteDraft.photos, stepAt(noteDraft.at));
                 noteDraftCtl.discard();
               }, 'Note added');
             }}
@@ -327,18 +372,67 @@ export default function ManageTicket({ session, id }: { session: Session; id: st
               disabled={busy}
               onFiles={(files) => uploadPhotos(files, 'note', (url) => setNoteDraft((d) => ({ ...d, photos: [...d.photos, url] })))}
             />
+            {canEditTimes && (noteDraft.text.trim() || noteDraft.photos.length > 0) && (
+              <WhenField
+                value={noteDraft.at ?? null}
+                onChange={(at) => setNoteDraft((d) => ({ ...d, at }))}
+                min={lastEventAt}
+                label="Noted at"
+                disabled={busy}
+              />
+            )}
             <button className="btn ghost small" disabled={busy || uploadingCount > 0}>Add note</button>
           </form>
 
           {message && <p className="ok small" aria-live="polite">✓ {message}</p>}
-          {error && <p className="error">{error}</p>}
+          {error && !times && <p className="error">{error}</p>}
         </aside>
       </div>
 
-      <h3>Timeline</h3>
+      <div className="timeline-head">
+        <h3>Timeline</h3>
+        {canEditTimes && !times && (
+          <button
+            className="link-btn quiet"
+            onClick={() => {
+              setTimes(Object.fromEntries(events.map((e) => [e.id, toLocalInput(e.created_at)])));
+              setError(null);
+              setMessage(null);
+            }}
+          >
+            Adjust times
+          </button>
+        )}
+      </div>
+      {times && (
+        <div className="callout">
+          <p className="small">
+            Times are normally recorded automatically. Change only what needs correcting — the ticket's raised, assigned,
+            resolved and closed times and its stats follow the timeline.
+          </p>
+          <div className="actions">
+            <button
+              className="btn primary small"
+              disabled={busy || !Object.keys(changedTimes).length}
+              onClick={() =>
+                run(async () => {
+                  await setEventTimes(ticket.id, changedTimes);
+                  setTimes(null);
+                }, 'Times updated')
+              }
+            >
+              Save times
+            </button>
+            <button className="btn ghost small" disabled={busy} onClick={() => setTimes(null)}>
+              Cancel
+            </button>
+          </div>
+          {error && <p className="error">{error}</p>}
+        </div>
+      )}
       <ol className="timeline">
         {[...events].reverse().map((e) => (
-          <li key={e.id}>
+          <li key={e.id} className={times && changedTimes[e.id] ? 'time-changed' : ''}>
             <div>
               {e.type === 'created'
                 ? 'Ticket raised'
@@ -347,13 +441,32 @@ export default function ManageTicket({ session, id }: { session: Session; id: st
                   : (e.note ?? '')}
             </div>
             <PhotoStrip photos={e.photos ?? []} />
-            <div className="muted small">
-              {e.actor_name ? `${e.actor_name} · ` : ''}
-              {formatDate(e.created_at)}
-            </div>
+            {times ? (
+              <div className="muted small time-edit">
+                {e.actor_name ? `${e.actor_name} · ` : ''}
+                <input
+                  type="datetime-local"
+                  value={times[e.id] ?? ''}
+                  max={nowInput}
+                  disabled={busy}
+                  aria-label="Time"
+                  onChange={(ev) => setTimes((t) => ({ ...t, [e.id]: ev.target.value }))}
+                />
+              </div>
+            ) : (
+              <div className="muted small">
+                {e.actor_name ? `${e.actor_name} · ` : ''}
+                {formatDate(e.created_at)}
+              </div>
+            )}
           </li>
         ))}
       </ol>
+      {ticket.times_edited_by && ticket.times_edited_at && (
+        <p className="muted small">
+          Times adjusted by hand by {ticket.times_edited_by} on {formatDate(ticket.times_edited_at)}.
+        </p>
+      )}
     </>
   );
 }

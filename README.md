@@ -36,11 +36,18 @@ Decided by the API (`permissions`), not the portal:
 
 | Login | Screens |
 |---|---|
-| admin | Recording (no time limit), Difference, Analytics (edit + export), Maintenance (everything) |
+| admin | Recording (no time limit), Difference, Analytics (edit + export), Maintenance (everything, incl. custom times) |
 | supervisor | Recording (12 h window), Difference, Maintenance (workflow statuses, technicians) |
-| staff (maintenance) | Recording (12 h window), Difference, Maintenance (full management, no report export; tickets filed under Maintenance) |
-| Administration department | Analytics (read-only, export), Maintenance (full management incl. export; tickets filed under Administration) |
-| other departments | their own requests: raise, follow, approve / not fixed / cancel |
+| staff (maintenance) | Recording (12 h window), Difference, Maintenance (full management incl. custom times, no report export; tickets filed under Maintenance) |
+| Administration department | the request pages over **every** department ("All requests": filter / sort by department): own tickets like any department, others read-only except **Reopen**; Analytics (read-only, export) |
+| other departments | their own requests: raise, follow, approve / not fixed / cancel; filter by when raised |
+
+**Ticket times** are automatic. On tickets raised by admin or staff, those two
+roles can also record work done earlier — small, deliberately low-key links:
+"Raised earlier?" on the new-ticket form, "Done earlier?" when assigning,
+changing status or adding a note, and "Adjust times" on the timeline. The API
+enforces it (`tickets.custom_times`, `allowsCustomTimes`) and keeps the
+timeline in order; admins see who adjusted a ticket's times.
 
 ## Security
 

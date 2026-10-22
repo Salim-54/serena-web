@@ -43,6 +43,11 @@ export interface Ticket {
   dept: Department | null;
   /** Times it came back after being fixed. */
   reopen_count: number;
+  /** Raised by admin or staff — only then may times be set by hand. */
+  allows_custom_times: boolean;
+  /** Who last adjusted the times by hand (the API sends it to admins only). */
+  times_edited_by: string | null;
+  times_edited_at: string | null;
 }
 
 export interface TicketEvent {
@@ -78,6 +83,9 @@ export interface ApiTicket {
   departmentId: number;
   department?: Department | null;
   reopenCount?: number;
+  allowsCustomTimes?: boolean;
+  timesEditedByName?: string | null;
+  timesEditedAt?: string | null;
 }
 
 interface ApiEvent {
@@ -112,6 +120,9 @@ export function fromApiTicket(t: ApiTicket): Ticket {
     department: t.departmentId,
     dept: t.department ? { id: t.department.id, name: t.department.name, kind: t.department.kind } : null,
     reopen_count: t.reopenCount ?? 0,
+    allows_custom_times: t.allowsCustomTimes ?? false,
+    times_edited_by: t.timesEditedByName ?? null,
+    times_edited_at: t.timesEditedAt ?? null,
   };
 }
 
@@ -160,7 +171,8 @@ export const technicianNames = (t: Pick<Ticket, 'technicians'>) =>
 
 // ---- department pages ----------------------------------------------------
 
-/** The signed-in department's tickets (the server scopes the list). */
+/** The signed-in department's tickets (the server scopes the list;
+ * Administration gets every department's). */
 export async function listTickets(): Promise<Ticket[]> {
   return (await getAll<ApiTicket>('/tickets')).map(fromApiTicket);
 }
@@ -187,8 +199,9 @@ export interface NewTicket {
   requester_name: string;
 }
 
-/** Raise a ticket; returns its id. Photos are added afterwards (named after the number). */
-export async function createTicket(t: NewTicket, departmentId?: number): Promise<number> {
+/** Raise a ticket; returns its id. Photos are added afterwards (named after
+ * the number). [raisedAt] (ISO): raised earlier — admin/staff only. */
+export async function createTicket(t: NewTicket, departmentId?: number, raisedAt?: string | null): Promise<number> {
   const created = await post<ApiTicket>('/tickets', {
     title: t.title,
     description: t.description || undefined,
@@ -197,6 +210,7 @@ export async function createTicket(t: NewTicket, departmentId?: number): Promise
     priority: t.priority,
     requesterName: t.requester_name,
     ...(departmentId ? { departmentId } : {}),
+    ...(raisedAt ? { raisedAt } : {}),
   });
   return created.id;
 }
@@ -218,6 +232,14 @@ export async function reject(ticket: Ticket, requesterName: string, reason: stri
 
 export async function cancel(ticket: Ticket, requesterName: string, reason?: string) {
   await post(`/tickets/${ticket.id}/cancel`, { requesterName, ...(reason?.trim() ? { reason: reason.trim() } : {}) });
+}
+
+/** Statuses Administration may reopen another department's ticket from. */
+export const REOPENABLE: TicketStatus[] = ['resolved', 'closed'];
+
+/** Administration reopens another department's ticket (back to maintenance, with the reason). */
+export async function reopen(ticket: Ticket, requesterName: string, reason: string) {
+  await post(`/tickets/${ticket.id}/reopen`, { requesterName, reason: reason.trim() });
 }
 
 /** Refreshes [onChange] periodically (replaces realtime). */

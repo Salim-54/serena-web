@@ -38,6 +38,7 @@ const GROUPS: { key: StatusGroup; label: string; statuses: TicketStatus[] | null
 ];
 
 const PRESETS: { key: string; label: string; days: number | null }[] = [
+  { key: '1', label: 'Today', days: 1 },
   { key: '7', label: '7 days', days: 7 },
   { key: '30', label: '30 days', days: 30 },
   { key: '90', label: '90 days', days: 90 },

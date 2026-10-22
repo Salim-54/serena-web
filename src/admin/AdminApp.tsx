@@ -15,7 +15,7 @@ import Technicians from './Technicians';
 //   admin          → everything
 //   supervisor     → Recording (record window) · Difference · Maintenance (workflow)
 //   staff          → Recording (record window) · Difference · Maintenance (no export)
-//   Administration → Maintenance · Analytics (read-only)
+// (Administration uses the department request portal instead — App.tsx.)
 
 function maintenancePage(route: string, session: Session) {
   const edit = route.match(/^\/maintenance\/tickets\/(\d+)\/edit$/);
@@ -36,9 +36,7 @@ export default function AdminApp({ session }: { session: Session }) {
     p.utilities.analytics !== 'none' && { path: '/analytics', label: 'Analytics' },
     p.tickets.viewAll && { path: '/maintenance', label: 'Maintenance' },
   ].filter((t): t is { path: string; label: string } => Boolean(t));
-  // Administration lands on Maintenance; others on their first tab.
-  const fallback = session.kind === 'department' ? '/maintenance' : tabs[0].path;
-  const current = tabs.find((t) => route.startsWith(t.path))?.path ?? fallback;
+  const current = tabs.find((t) => route.startsWith(t.path))?.path ?? tabs[0].path;
 
   return (
     <>

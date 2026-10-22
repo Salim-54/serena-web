@@ -13,7 +13,7 @@ import { createTicket, ticketNumber } from '../lib/tickets';
  * staff under Maintenance.
  */
 export default function TicketEditor({ session, id }: { session: Session; id?: string }) {
-  const raiseAs = permissionsFor(session).tickets.raiseAs;
+  const { raiseAs, customTimes } = permissionsFor(session).tickets;
   const [departments, setDepartments] = useState<Department[] | null>(null);
   const [ticket, setTicket] = useState<AdminTicket | null | undefined>(id ? undefined : null);
   const [error, setError] = useState<string | null>(null);
@@ -48,13 +48,14 @@ export default function TicketEditor({ session, id }: { session: Session; id?: s
         }
         submitLabel={ticket ? 'Save changes' : 'Create ticket'}
         onCancelHref={ticket ? `#/maintenance/tickets/${ticket.id}` : '#/maintenance'}
-        onSubmit={async (v) => {
+        allowBackdate={customTimes}
+        onSubmit={async (v, raisedAt) => {
           if (ticket) {
             await updateDetails(ticket, { ...v, department: v.department ?? ticket.department });
             return ticket.id;
           }
           if (showPicker && v.department == null) throw new Error('Pick a department.');
-          return createTicket(v, showPicker ? v.department! : undefined);
+          return createTicket(v, showPicker ? v.department! : undefined, raisedAt);
         }}
         onDone={(ticketId) => navigate(`/maintenance/tickets/${ticketId}`)}
       />

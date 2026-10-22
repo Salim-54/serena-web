@@ -2,13 +2,16 @@ import { useCallback, useEffect, useState } from 'react';
 import { lastRequesterName, rememberRequesterName, type DepartmentSession } from '../lib/auth';
 import { useDraft } from '../lib/drafts';
 import { formatDate } from '../lib/format';
+import { permissionsFor } from '../lib/permissions';
 import {
+  REOPENABLE,
   STATUS_LABELS,
   approve,
   cancel,
   getTicket,
   listEvents,
   reject,
+  reopen,
   ticketNumber,
   watchTickets,
   type Ticket,
@@ -18,9 +21,14 @@ import { PriorityBadge, StatusBadge } from '../components/Badges';
 import TechnicianList from '../components/TechnicianList';
 import PhotoStrip from '../components/PhotoStrip';
 
-type Action = 'approve' | 'reject' | 'cancel';
+// A department's view of one ticket: approve / not fixed / cancel its own
+// requests. Administration can also open any department's ticket here —
+// read-only, except that it may reopen a fixed or closed one.
+
+type Action = 'approve' | 'reject' | 'cancel' | 'reopen';
 
 export default function TicketDetail({ session, id }: { session: DepartmentSession; id: string }) {
+  const perms = permissionsFor(session).tickets;
   const [ticket, setTicket] = useState<Ticket | null | undefined>(undefined);
   const [events, setEvents] = useState<TicketEvent[]>([]);
   // The open approve/reject/cancel box and its comment survive a refresh.
@@ -28,7 +36,6 @@ export default function TicketDetail({ session, id }: { session: DepartmentSessi
     `ticket-action:${id}`,
     { action: null, note: '' },
   );
-  const action = pendingAction.action;
   const note = pendingAction.note;
   const setAction = (a: Action | null) => setPendingAction((p) => ({ ...p, action: a }));
   const setNote = (n: string) => setPendingAction((p) => ({ ...p, note: n }));
@@ -62,6 +69,7 @@ export default function TicketDetail({ session, id }: { session: DepartmentSessi
       if (action === 'approve') await approve(ticket, name, note);
       if (action === 'reject') await reject(ticket, name, note);
       if (action === 'cancel') await cancel(ticket, name, note);
+      if (action === 'reopen') await reopen(ticket, name, note);
       rememberRequesterName(name);
       actionDraft.discard();
       await load();
@@ -71,13 +79,21 @@ export default function TicketDetail({ session, id }: { session: DepartmentSessi
     setBusy(false);
   }
 
-  const canCancel = ticket.status === 'open' || ticket.status === 'assigned';
-  const noteRequired = action === 'reject';
+  // Own tickets: the usual department rights. Other departments' tickets
+  // (Administration): read-only, but may be reopened once fixed or closed.
+  const own = String(ticket.department) === session.departmentId;
+  const canRespond = own && ticket.status === 'resolved';
+  const canCancel = own && (ticket.status === 'open' || ticket.status === 'assigned');
+  const canReopen = !own && perms.reopenOthers && REOPENABLE.includes(ticket.status);
+  // A saved draft only applies while its action is still allowed.
+  const allowed: Record<Action, boolean> = { approve: canRespond, reject: canRespond, cancel: canCancel, reopen: canReopen };
+  const action = pendingAction.action && allowed[pendingAction.action] ? pendingAction.action : null;
+  const noteRequired = action === 'reject' || action === 'reopen';
 
   return (
     <>
       <div className="page-head">
-        <a href="#/" className="back">← Our requests</a>
+        <a href="#/" className="back">← {perms.viewAll ? 'All requests' : 'Our requests'}</a>
       </div>
 
       <article className="card detail">
@@ -90,6 +106,12 @@ export default function TicketDetail({ session, id }: { session: DepartmentSessi
         <h2>{ticket.title}</h2>
         {ticket.description && <p className="description">{ticket.description}</p>}
         <dl className="facts">
+          {!own && (
+            <>
+              <dt>Department</dt>
+              <dd>{ticket.dept?.name ?? '—'}</dd>
+            </>
+          )}
           <dt>Location</dt>
           <dd>{ticket.location}</dd>
           <dt>Category</dt>
@@ -108,7 +130,7 @@ export default function TicketDetail({ session, id }: { session: DepartmentSessi
           <PhotoStrip photos={ticket.photos} size={96} />
         )}
 
-        {ticket.status === 'resolved' && action === null && (
+        {canRespond && action === null && (
           <div className="callout">
             <p>Maintenance marked this as fixed. Please check and confirm.</p>
             <div className="actions">
@@ -124,19 +146,26 @@ export default function TicketDetail({ session, id }: { session: DepartmentSessi
           </div>
         )}
 
+        {canReopen && action === null && (
+          <div className="actions">
+            <button className="btn ghost small" onClick={() => setAction('reopen')}>Reopen ticket</button>
+          </div>
+        )}
+
         {action && (
           <div className="callout">
             <p>
               {action === 'approve' && 'Confirm the issue is fixed. This closes the ticket.'}
               {action === 'reject' && 'Tell maintenance what is still wrong. The ticket goes back to them.'}
               {action === 'cancel' && 'Cancel this request?'}
+              {action === 'reopen' && `Reopen this ${ticket.dept?.name ?? ''} ticket? It goes back to maintenance as in progress.`}
             </p>
             <label>
               Your name
               <input value={name} onChange={(e) => setName(e.target.value)} required />
             </label>
             <label>
-              {noteRequired ? "What's still wrong?" : 'Comment (optional)'}
+              {action === 'reopen' ? 'Why reopen it?' : noteRequired ? "What's still wrong?" : 'Comment (optional)'}
               <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} />
             </label>
             {error && <p className="error">{error}</p>}
@@ -146,7 +175,15 @@ export default function TicketDetail({ session, id }: { session: DepartmentSessi
                 disabled={busy || !name.trim() || (noteRequired && !note.trim())}
                 onClick={submit}
               >
-                {busy ? 'Saving…' : action === 'approve' ? 'Confirm fixed' : action === 'reject' ? 'Send back' : 'Cancel request'}
+                {busy
+                  ? 'Saving…'
+                  : action === 'approve'
+                    ? 'Confirm fixed'
+                    : action === 'reject'
+                      ? 'Send back'
+                      : action === 'reopen'
+                        ? 'Reopen ticket'
+                        : 'Cancel request'}
               </button>
               <button className="btn ghost" onClick={() => { setAction(null); setError(null); }} disabled={busy}>
                 Back

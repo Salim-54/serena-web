@@ -114,22 +114,41 @@ export async function saveTechnician(t: Omit<Technician, 'id'> & { id?: number }
   else await post('/technicians', body);
 }
 
+// [at] (ISO) on the actions below: done earlier — admin/staff on tickets
+// raised by admin or staff; the API refuses it otherwise.
+
 /** Timeline note, optionally with photos. */
-export async function addNote(ticketId: number, note: string, photos: string[] = []) {
-  await post(`/tickets/${ticketId}/notes`, { ...(note.trim() ? { note: note.trim() } : {}), ...(photos.length ? { photos } : {}) });
+export async function addNote(ticketId: number, note: string, photos: string[] = [], at?: string | null) {
+  await post(`/tickets/${ticketId}/notes`, {
+    ...(note.trim() ? { note: note.trim() } : {}),
+    ...(photos.length ? { photos } : {}),
+    ...(at ? { at } : {}),
+  });
 }
 
 /** Set exactly these technicians ([] = unassign). */
-export async function setTechnicians(ticket: AdminTicket, technicianIds: number[]) {
-  await put(`/tickets/${ticket.id}/technicians`, { technicianIds });
+export async function setTechnicians(ticket: AdminTicket, technicianIds: number[], at?: string | null) {
+  await put(`/tickets/${ticket.id}/technicians`, { technicianIds, ...(at ? { at } : {}) });
 }
 
 /** Status change with an optional note and photos (e.g. proof of the fix). */
-export async function setStatus(ticket: AdminTicket, status: TicketStatus, note?: string, photos: string[] = []) {
+export async function setStatus(ticket: AdminTicket, status: TicketStatus, note?: string, photos: string[] = [], at?: string | null) {
   await post(`/tickets/${ticket.id}/status`, {
     status,
     ...(note?.trim() ? { note: note.trim() } : {}),
     ...(photos.length ? { photos } : {}),
+    ...(at ? { at } : {}),
+  });
+}
+
+/**
+ * Adjust timeline times by hand ({event id: ISO time}, only the changed
+ * ones). The API checks them (not in the future, nothing before the ticket
+ * was raised, status changes in order) and recomputes the ticket's times.
+ */
+export async function setEventTimes(ticketId: number, times: Record<number, string>) {
+  await put(`/tickets/${ticketId}/event-times`, {
+    times: Object.entries(times).map(([eventId, at]) => ({ eventId: Number(eventId), at })),
   });
 }
 

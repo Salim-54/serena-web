@@ -363,3 +363,27 @@ button.photo { padding: 0; cursor: zoom-in; background: var(--surface); }
 .viewer img { max-width: 100%; max-height: calc(100vh - 100px); object-fit: contain; border-radius: 6px; }
 .viewer-bar { display: flex; align-items: center; gap: 10px; color: #fff; }
 .viewer-bar .btn.ghost { color: #fff; border-color: rgba(255,255,255,.4); }
+
+/* ---------- Hand-adjusted times (admin / maintenance staff) ---------- */
+/* Deliberately low-key: automatic times are the default. */
+.link-btn {
+  font: inherit; background: none; border: 0; padding: 0; cursor: pointer;
+  color: var(--brand); text-decoration: underline; text-underline-offset: 2px;
+}
+.link-btn.quiet, .backdate-toggle { color: var(--muted); font-size: 12px; }
+.backdate-toggle { align-self: flex-start; }
+.backdate { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border: 1px dashed var(--border); border-radius: 8px; }
+.backdate p { margin: 0; }
+.timeline-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.time-edit { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+.time-edit input { width: auto; padding: 4px 8px; font-size: 13px; }
+.timeline li.time-changed > div:first-child { font-weight: 600; }
+.callout p.small { font-weight: 400; }
+
+/* Department requests: when raised */
+.time-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 10px; }
+.time-filter .seg { max-width: 100%; overflow-x: auto; }
+.time-filter .seg button { white-space: nowrap; }
+.time-range { display: flex; flex-wrap: wrap; gap: 8px 12px; }
+.time-filter select { width: auto; padding: 6px 10px; font-size: 13px; }
+.dept-tag { padding: 1px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); }

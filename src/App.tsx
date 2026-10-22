@@ -8,6 +8,7 @@ import NewTicket from './pages/NewTicket';
 import TicketDetail from './pages/TicketDetail';
 import ChangePassword from './pages/ChangePassword';
 import AdminApp from './admin/AdminApp';
+import Analytics from './admin/Analytics';
 import { InstallButton, IosInstallHint, OfflineBanner } from './components/InstallApp';
 import UpdateBanner from './components/UpdateBanner';
 import { permissionsFor, sessionLabel } from './lib/permissions';
@@ -60,14 +61,21 @@ export default function App() {
   if (session.mustChangePassword) return <ChangePassword required onChanged={setSession} />;
   if (route === '/account/password') return <ChangePassword required={false} onChanged={(s) => (setSession(s), navigate('/'))} onCancel={() => navigate('/')} />;
 
-  const isConsole = permissionsFor(session).console;
+  const perms = permissionsFor(session);
+  const isConsole = perms.console;
+  // Department logins get the request portal. Administration also sees
+  // every department's tickets there and has a read-only Analytics tab.
+  const hasAnalytics = !isConsole && perms.utilities.analytics !== 'none';
+  const onAnalytics = hasAnalytics && route.startsWith('/analytics');
   let page;
   if (isConsole || session.kind !== 'department') {
     page = <AdminApp session={session} />;
+  } else if (onAnalytics) {
+    page = <Analytics session={session} />;
   } else {
     const detail = route.match(/^\/tickets\/(\d+)$/);
     if (route === '/new') page = <NewTicket session={session} />;
-    else if (detail) page = <TicketDetail session={session} id={detail[1]} />;
+    else if (detail) page = <TicketDetail key={detail[1]} session={session} id={detail[1]} />;
     else page = <TicketList session={session} />;
   }
 
@@ -98,7 +106,15 @@ export default function App() {
           </button>
         </div>
       </header>
-      <main className={isConsole ? 'container wide' : 'container'}>{page}</main>
+      <main className={isConsole || onAnalytics ? 'container wide' : 'container'}>
+        {hasAnalytics && (
+          <nav className="tabs admin-nav" aria-label="Sections">
+            <a href="#/" className={`tab ${onAnalytics ? '' : 'active'}`}>Requests</a>
+            <a href="#/analytics" className={`tab ${onAnalytics ? 'active' : ''}`}>Analytics</a>
+          </nav>
+        )}
+        {page}
+      </main>
       <IosInstallHint />
     </>
   );

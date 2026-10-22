@@ -5,7 +5,9 @@ import type { Session } from './auth';
 // this; the UI only uses it to show the right screens and buttons.
 
 export interface Permissions {
-  /** Uses the console (tabs) instead of the department request pages. */
+  /** Uses the console (tabs) instead of the department request pages.
+   * Department logins never do — Administration gets the request pages
+   * over every department plus a read-only Analytics tab. */
   console: boolean;
   tickets: {
     viewAll: boolean;
@@ -16,6 +18,10 @@ export interface Permissions {
     create: boolean;
     exportReport: boolean;
     technicians: boolean;
+    /** Raise earlier / do a step earlier / adjust the timeline — on tickets raised by admin or staff. */
+    customTimes: boolean;
+    /** Reopen other departments' fixed or closed tickets (Administration). */
+    reopenOthers: boolean;
     raiseAs: Session['raiseAs'];
   };
   utilities: {
@@ -33,7 +39,7 @@ export function permissionsFor(s: Session): Permissions {
   const manage = has('tickets.manage');
   const workflow = has('tickets.workflow');
   return {
-    console: has('tickets.view_all') || has('readings.view') || has('analytics.read'),
+    console: s.kind !== 'department' && (has('tickets.view_all') || has('readings.view') || has('analytics.read')),
     tickets: {
       viewAll: has('tickets.view_all'),
       manage,
@@ -41,6 +47,8 @@ export function permissionsFor(s: Session): Permissions {
       create: has('tickets.create'),
       exportReport: has('tickets.export'),
       technicians: has('technicians.manage'),
+      customTimes: has('tickets.custom_times'),
+      reopenOthers: has('tickets.reopen'),
       raiseAs: s.raiseAs,
     },
     utilities: {
@@ -52,6 +60,10 @@ export function permissionsFor(s: Session): Permissions {
     seeRecordedBy: has('readings.audit'),
   };
 }
+
+/** Custom times on this ticket: the login may (admin/staff) and the ticket was raised by admin or staff. */
+export const canCustomizeTimes = (s: Session, ticket: { allows_custom_times: boolean }) =>
+  permissionsFor(s).tickets.customTimes && ticket.allows_custom_times;
 
 /** Name written on timelines for console actions (the server records the user too). */
 export const actorName = (s: Session) => s.name;

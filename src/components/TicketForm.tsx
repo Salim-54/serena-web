@@ -2,11 +2,13 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { photosEnabled, uploadTicketPhoto } from '../lib/photos';
 import AuthImage from './AuthImage';
 import { useDraft } from '../lib/drafts';
+import { fromLocalInput } from '../lib/format';
 import { compressImage } from '../lib/image';
 import { clearPending, loadPending, savePending } from '../lib/pendingPhotos';
 import { CATEGORIES, PRIORITIES, appendTicketPhotos, ticketNumber as formatNumber } from '../lib/tickets';
 import type { Department, TicketFields } from '../lib/maintenance';
 import PhotoPicker from './PhotoPicker';
+import WhenField from './WhenField';
 
 // Shared by the department "New request" page and the console raise/edit
 // screens.
@@ -18,6 +20,10 @@ import PhotoPicker from './PhotoPicker';
 //   * new ticket → the number doesn't exist yet, so compressed photos wait
 //     on the device (lib/pendingPhotos.ts, survives a reload) and are
 //     uploaded right after the ticket is created.
+//
+// New tickets are stamped with the current time. Admin and maintenance
+// staff (allowBackdate) can set an earlier "raised at" time, tucked behind a
+// small link so the automatic time stays the obvious default.
 
 const MAX_PHOTOS = 4;
 
@@ -44,6 +50,7 @@ export default function TicketForm({
   onSubmit,
   onDone,
   onCancelHref = '#/',
+  allowBackdate = false,
 }: {
   /** Where the draft is saved, e.g. "new-ticket:3" or "edit-ticket:12". */
   draftKey: string;
@@ -55,11 +62,13 @@ export default function TicketForm({
   /** Set when editing an existing ticket (photos upload immediately under it). */
   ticketId?: number;
   submitLabel: string;
-  /** Saves the ticket and returns its id. */
-  onSubmit: (values: TicketFormValues) => Promise<number>;
+  /** Saves the ticket and returns its id. [raisedAt] (ISO) is set only when backdated. */
+  onSubmit: (values: TicketFormValues, raisedAt: string | null) => Promise<number>;
   /** After the ticket and its photos are saved. */
   onDone: (id: number) => void;
   onCancelHref?: string;
+  /** New tickets: offer "Raised earlier?" (admin and maintenance staff only). */
+  allowBackdate?: boolean;
 }) {
   const [v, setV, draft] = useDraft<TicketFormValues>(draftKey, () => ({
     department: initial.department ?? null,
@@ -71,6 +80,9 @@ export default function TicketForm({
     description: initial.description ?? '',
     photos: initial.photos ?? [],
   }));
+  // Backdated "raised at" (datetime-local value); null = now (the default).
+  const [raisedAt, setRaisedAt, raisedDraft] = useDraft<string | null>(`${draftKey}:raised-at`, null);
+  const canBackdate = allowBackdate && !ticketId;
   // New tickets only: compressed photos waiting for the ticket number.
   const [pending, setPending] = useState<Blob[]>([]);
   const [pendingUrls, setPendingUrls] = useState<string[]>([]);
@@ -145,7 +157,7 @@ export default function TicketForm({
           title: v.title.trim(),
           location: v.location.trim(),
           description: v.description.trim(),
-        }));
+        }, canBackdate && raisedAt ? fromLocalInput(raisedAt) : null));
       setSavedId(id);
       if (pending.length) {
         const number = formatNumber(id);
@@ -167,6 +179,7 @@ export default function TicketForm({
         await clearPending(draftKey);
       }
       draft.clear();
+      raisedDraft.clear();
       onDone(id);
     } catch (err) {
       setError((err as Error).message || 'Could not save.');
@@ -184,6 +197,7 @@ export default function TicketForm({
             className="btn ghost small"
             onClick={() => {
               draft.discard();
+              raisedDraft.discard();
               setPending([]);
               clearPending(draftKey);
             }}
@@ -288,6 +302,16 @@ export default function TicketForm({
           </>
         )}
       </div>
+
+      {canBackdate && (
+        <WhenField
+          value={raisedAt}
+          onChange={setRaisedAt}
+          link="Raised earlier?"
+          label="Raised at"
+          hint="Only for a problem reported earlier — the ticket starts at this time, and later steps can be given earlier times too."
+        />
+      )}
 
       {error && <p className="error">{error}</p>}
       <div className="actions">
